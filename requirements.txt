@@ -1,7 +1,6 @@
-pyrogram==2.0.106
+pyrogram
 tgcrypto
 motor
+nudenet
+openai-whisper
 ffmpeg-python
-numpy==1.26.4
-nudenet==3.4.2
-onnxruntime==1.17.0
