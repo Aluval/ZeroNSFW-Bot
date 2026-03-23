@@ -1,12 +1,19 @@
-import os, json, subprocess, uuid
+import os, uuid, subprocess
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from nudenet import NudeDetector
 from config import *
 from Database.database import db
 
+# ================= INIT =================
 DOWNLOAD_DIR = "downloads"
+FRAMES_DIR = "frames"
+
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+os.makedirs(FRAMES_DIR, exist_ok=True)
+
+detector = NudeDetector()
 
 app = Client(
     "GroupScannerBot",
@@ -17,6 +24,15 @@ app = Client(
 
 # ================= CONSTANTS =================
 FILENAME_KEYWORDS = ["18", "porn", "xxx", "adult", "sex", "ashleel"]
+
+NSFW_CLASSES = {
+    "FEMALE_GENITALIA_EXPOSED",
+    "MALE_GENITALIA_EXPOSED",
+    "ANUS_EXPOSED",
+    "BREAST_EXPOSED",
+    "BUTTOCKS_EXPOSED"
+}
+
 WARN_LIMIT = 3
 
 # ================= HELPERS =================
@@ -25,7 +41,22 @@ def get_safe_filename(file):
         return file.file_name
     return "file"
 
-# ================= SETTINGS UI =================
+def extract_frames(video_path):
+    # clear old frames
+    for f in os.listdir(FRAMES_DIR):
+        try:
+            os.remove(os.path.join(FRAMES_DIR, f))
+        except:
+            pass
+
+    subprocess.run([
+        "ffmpeg", "-i", video_path,
+        "-vf", "fps=1",
+        f"{FRAMES_DIR}/frame_%03d.jpg",
+        "-y"
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+# ================= SETTINGS =================
 def settings_keyboard(settings):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"Scanner: {'ON' if settings['enabled'] else 'OFF'}", callback_data="SET_toggle_enabled")],
@@ -36,6 +67,7 @@ def settings_keyboard(settings):
 @app.on_message(filters.command("settings") & filters.group & filters.user(ADMIN))
 async def settings_cmd(_, m: Message):
     s = await db.get_settings(m.chat.id)
+
     text = (
         f"⚙️ **Group Settings**\n\n"
         f"🆔 `{m.chat.id}`\n"
@@ -45,6 +77,7 @@ async def settings_cmd(_, m: Message):
         f"🚫 Auto Ban: {s['auto_ban']}\n"
         f"⚠️ Warn Limit: {WARN_LIMIT}"
     )
+
     await m.reply(text, reply_markup=settings_keyboard(s))
 
 @app.on_callback_query(filters.regex("^SET_"))
@@ -65,7 +98,7 @@ async def settings_callback(_, q: CallbackQuery):
     s = await db.get_settings(chat_id)
 
     await q.message.edit_text(
-        f"⚙️ Settings Updated\n\nEnabled: {s['enabled']}\nSilent: {s['silent_delete']}\nAutoBan: {s['auto_ban']}",
+        f"⚙️ Updated\n\nEnabled: {s['enabled']}\nSilent: {s['silent_delete']}\nAutoBan: {s['auto_ban']}",
         reply_markup=settings_keyboard(s)
     )
     await q.answer("✅ Updated")
@@ -74,10 +107,6 @@ async def settings_callback(_, q: CallbackQuery):
 @app.on_message(filters.command("start") & filters.private)
 async def start_cmd(_, m: Message):
     await m.reply("👋 Add me to a group to scan NSFW content.")
-
-@app.on_message(filters.command("id") & filters.group)
-async def id_cmd(_, m: Message):
-    await m.reply(f"Group ID: `{m.chat.id}`\nYour ID: `{m.from_user.id}`")
 
 @app.on_message(filters.command("warn") & filters.group & filters.user(ADMIN))
 async def warn_cmd(client, m: Message):
@@ -105,7 +134,7 @@ async def ban_cmd(client, m: Message):
     await m.reply(f"⛔ {user.mention} banned")
 
 # ================= SCANNER =================
-@app.on_message(filters.video | filters.audio | filters.document | filters.photo)
+@app.on_message(filters.video | filters.photo | filters.document)
 async def scanner(client, m: Message):
 
     if m.chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
@@ -115,12 +144,41 @@ async def scanner(client, m: Message):
     if not settings["enabled"]:
         return
 
-    file = m.video or m.audio or m.document or m.photo
+    file = m.video or m.document or m.photo
     filename = get_safe_filename(file)
 
-    # 🔍 FILENAME CHECK ONLY (LIGHTWEIGHT)
-    if any(k in filename.lower() for k in FILENAME_KEYWORDS):
+    unique = f"{uuid.uuid4().hex}"
+    path = await m.download(file_name=f"{DOWNLOAD_DIR}/{unique}")
 
+    restricted = False
+
+    # 🔹 1. Filename check
+    if any(k in filename.lower() for k in FILENAME_KEYWORDS):
+        restricted = True
+
+    # 🔹 2. Image detection
+    elif m.photo:
+        detections = detector.detect(path)
+        for d in detections:
+            if d["class"] in NSFW_CLASSES:
+                restricted = True
+                break
+
+    # 🔹 3. Video detection
+    elif m.video:
+        extract_frames(path)
+
+        for frame in os.listdir(FRAMES_DIR):
+            detections = detector.detect(os.path.join(FRAMES_DIR, frame))
+            for d in detections:
+                if d["class"] in NSFW_CLASSES:
+                    restricted = True
+                    break
+            if restricted:
+                break
+
+    # 🔥 ACTION
+    if restricted:
         try:
             await m.delete()
         except:
@@ -135,6 +193,7 @@ async def scanner(client, m: Message):
                 pass
 
             await db.reset_warns(m.chat.id, m.from_user.id)
+
             await client.send_message(
                 m.chat.id,
                 f"⛔ {m.from_user.mention} banned (3 warnings)"
@@ -144,6 +203,12 @@ async def scanner(client, m: Message):
                 m.chat.id,
                 f"⚠️ {m.from_user.mention}\nWarnings: {warns}/{WARN_LIMIT}"
             )
+
+    # 🧹 Cleanup
+    try:
+        os.remove(path)
+    except:
+        pass
 
 print("✅ Bot Running...")
 app.run()
