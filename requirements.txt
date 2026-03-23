@@ -2,6 +2,6 @@ pyrogram==2.0.106
 tgcrypto
 motor
 ffmpeg-python
-numpy
-nudenet>=3.0.0
-onnxruntime>=1.17.0
+numpy==1.26.4
+nudenet==3.4.2
+onnxruntime==1.17.0
