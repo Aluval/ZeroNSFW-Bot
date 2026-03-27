@@ -23,6 +23,9 @@ whisper_model = whisper.load_model("base")
 
 app = Client(
     "GroupScannerBot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
 )
 
 # ================= CONSTANTS =================
