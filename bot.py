@@ -318,22 +318,34 @@ async def ban_cmd(client, m: Message):
 @app.on_message(filters.command("unban") & filters.group & filters.user(ADMIN))
 async def unban_cmd(client, m: Message):
     if not m.reply_to_message:
-        return await m.reply("Reply to a banned user.")
+        return await m.reply("Reply to a user to unban.")
 
     user = m.reply_to_message.from_user
 
     try:
+        member = await client.get_chat_member(m.chat.id, user.id)
+
+        # If already not banned
+        if member.status not in ["kicked", "restricted"]:
+            return await m.reply("⚠️ User is not banned.")
+
         await client.unban_chat_member(m.chat.id, user.id)
+
         await db.unban_user(m.chat.id, user.id)
         await db.reset_warns(m.chat.id, user.id)
 
         await m.reply(
-            f"✅ **Unbanned Successfully**\n"
-            f"👤 User: {user.mention}\n"
-            f"🆔 ID: `{user.id}`"
+            f"✅ **User Unbanned**\n"
+            f"👤 {user.mention}\n"
+            f"🆔 `{user.id}`"
         )
+
     except Exception as e:
-        await m.reply(f"❌ Failed to unban\n`{e}`")
+        await m.reply(
+            f"❌ Unban failed\n\n"
+            f"Reason:\n`{e}`\n\n"
+            f"💡 Make sure bot is admin with ban permission"
+        )
         
 
 @app.on_message(filters.command("userinfo"))
