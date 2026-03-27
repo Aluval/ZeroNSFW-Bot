@@ -1,6 +1,10 @@
-pyrogram
+pyrogram==2.0.106
 tgcrypto
 motor
 nudenet
+onnxruntime
 openai-whisper
 ffmpeg-python
+torch
+numpy
+pillow
