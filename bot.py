@@ -396,14 +396,14 @@ async def userinfo_cmd(client, m: Message):
         text = (
             f"👤 **User Info**\n\n"
             f"🆔 ID: `{user.id}`\n"
-            f"👤 Username: @{user.username}\n\n"
+            f"👤 Username: f"@{user.username}" if user.username else "No Username"
             f"⚠️ Group Warns: {warns}/{WARN_LIMIT}\n"
             f"🚫 Group Ban: {'YES' if ban_info else 'NO'}\n\n"
             f"📊 **Global Stats**\n"
             f"⚠️ Total Warns: {stats['warns']}\n"
             f"🚫 Total Bans: {stats['bans']}\n\n"
             f"🔍 Last NSFW Reason: "
-            f"{last_log['reasons'] if last_log else 'None'}"
+            f"{last_log.get('reasons', 'None') if last_log else 'None'}"
         )
 
         return await m.reply(text)
@@ -411,12 +411,10 @@ async def userinfo_cmd(client, m: Message):
 
 # ================= SCANNER =================
 @app.on_message(
-    (filters.video | filters.audio | filters.document | filters.photo)
+    (filters.video | filters.audio | filters.document | filters.photo | filters.text)
     & filters.incoming
 )
 async def scanner(client, m: Message):
-
-    print("📩 File received:", m.id)
 
     if m.chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
         return
@@ -424,91 +422,121 @@ async def scanner(client, m: Message):
     settings = await db.get_settings(m.chat.id)
 
     if not settings["enabled"]:
-        print("❌ Scanner disabled")
-        return
-
-    file = m.video or m.audio or m.document or m.photo
-
-    import uuid
-    unique_name = f"{uuid.uuid4().hex}"
-    path = os.path.join(DOWNLOAD_DIR, unique_name)
-
-    try:
-        path = await m.download(file_name=path)
-        print("✅ Downloaded:", path)
-    except Exception as e:
-        print("❌ Download error:", e)
         return
 
     restricted = False
     reasons = []
 
-    filename = get_safe_filename(file)
+    # ---------------- TEXT CHECK ----------------
+    if m.text:
+        text = m.text.lower()
 
-    # 🔥 QUICK TEST (force detection)
-    print("Filename:", filename)
+        TEXT_KEYWORDS = [
+            "sex", "porn", "xxx", "adult", "nude",
+            "fuck", "18+", "ashleel", "boobs", "hot"
+        ]
 
-    if any(k in filename.lower() for k in FILENAME_KEYWORDS):
-        restricted = True
-        reasons.append("Filename")
+        if any(word in text for word in TEXT_KEYWORDS):
+            restricted = True
+            reasons.append("Text")
 
-    if not restricted and m.photo:
-        print("📸 Checking photo...")
-        try:
-            detections = detector.detect(path)
-            print("Detections:", detections)
+    # ---------------- FILE CHECK ----------------
+    file = m.video or m.audio or m.document or m.photo
 
-            for d in detections:
-                if d["class"] in NSFW_CLASSES:
-                    restricted = True
-                    reasons.append("Photo")
-                    break
-        except Exception as e:
-            print("Photo error:", e)
-
-    if not restricted and not m.photo:
-        print("🎥 Checking video/audio...")
+    if file:
+        import uuid
+        unique_name = f"{uuid.uuid4().hex}"
+        path = os.path.join(DOWNLOAD_DIR, unique_name)
 
         try:
-            info = ffprobe_info(path)
-            has_video = any(s["codec_type"] == "video" for s in info["streams"])
-            has_audio = any(s["codec_type"] == "audio" for s in info["streams"])
+            path = await m.download(file_name=path)
         except:
-            has_video = has_audio = False
+            return
 
-        if has_video:
-            extract_frames(path, settings["frame_fps"])
-            result = detect_adult_video(settings["adult_threshold"])
-            print("Video NSFW:", result)
+        filename = get_safe_filename(file)
 
-            if result:
-                restricted = True
-                reasons.append("Video")
+        if any(k in filename.lower() for k in FILENAME_KEYWORDS):
+            restricted = True
+            reasons.append("Filename")
 
-        if not restricted and has_audio:
-            result = detect_explicit_audio(path)
-            print("Audio NSFW:", result)
+        # PHOTO
+        if not restricted and m.photo:
+            try:
+                detections = detector.detect(path)
+                for d in detections:
+                    if d["class"] in NSFW_CLASSES:
+                        restricted = True
+                        reasons.append("Photo")
+                        break
+            except:
+                pass
 
-            if result:
-                restricted = True
-                reasons.append("Audio")
+        # VIDEO / AUDIO
+        if not restricted and not m.photo:
+            try:
+                info = ffprobe_info(path)
+                has_video = any(s["codec_type"] == "video" for s in info["streams"])
+                has_audio = any(s["codec_type"] == "audio" for s in info["streams"])
+            except:
+                has_video = has_audio = False
 
-    # 🔥 ACTION
+            if has_video:
+                extract_frames(path, settings["frame_fps"])
+                if detect_adult_video(settings["adult_threshold"]):
+                    restricted = True
+                    reasons.append("Video")
+
+            if not restricted and has_audio and settings["scan_audio"]:
+                if detect_explicit_audio(path):
+                    restricted = True
+                    reasons.append("Audio")
+
+        try:
+            os.remove(path)
+        except:
+            pass
+
+    # ---------------- ACTION ----------------
     if restricted:
-        print("🚨 NSFW DETECTED")
-
         try:
             await m.delete()
-        except Exception as e:
-            print("Delete error:", e)
+        except:
+            pass
 
         warns = await db.add_warn(m.chat.id, m.from_user.id)
 
-        await client.send_message(
+        # ✅ GLOBAL STATS
+        await db.inc_user_warn(m.from_user.id)
+
+        # ✅ SAVE LOG WITH STRING REASON
+        await db.log_restricted(
             m.chat.id,
-            f"⚠️ {m.from_user.mention} NSFW detected\nWarnings: {warns}/{WARN_LIMIT}"
+            m.from_user.id,
+            "text/file",
+            ", ".join(reasons)
         )
 
+        if warns >= WARN_LIMIT:
+            try:
+                await client.ban_chat_member(m.chat.id, m.from_user.id)
+            except:
+                pass
+
+            await db.ban_user(m.chat.id, m.from_user.id, ", ".join(reasons))
+            await db.reset_warns(m.chat.id, m.from_user.id)
+            await db.inc_user_ban(m.from_user.id)
+
+            return await client.send_message(
+                m.chat.id,
+                f"⛔ {m.from_user.mention} banned\nReason: {', '.join(reasons)}"
+            )
+
+        await client.send_message(
+            m.chat.id,
+            f"⚠️ {m.from_user.mention}\n"
+            f"NSFW detected: {', '.join(reasons)}\n"
+            f"Warnings: {warns}/{WARN_LIMIT}"
+        )
 
 
 print("✅ Group Scanner Bot Running")
