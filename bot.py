@@ -61,22 +61,42 @@ def get_safe_filename(file):
 def extract_frames(video, fps):
     for f in os.listdir(FRAMES_DIR):
         os.remove(os.path.join(FRAMES_DIR, f))
+
     subprocess.run(
-        ["ffmpeg", "-i", video, "-vf", f"fps={fps}", f"{FRAMES_DIR}/f_%03d.jpg", "-y"],
+        [
+            "ffmpeg",
+            "-i", video,
+            "-vf", f"fps={fps},scale=320:-1",
+            f"{FRAMES_DIR}/frame_%03d.jpg",
+            "-y"
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
 
 def detect_adult_video(threshold):
     hits, total = 0, 0
+
     for img in os.listdir(FRAMES_DIR):
-        dets = detector.detect(os.path.join(FRAMES_DIR, img))
-        for d in dets:
-            if d["class"] in NSFW_CLASSES:
-                hits += 1
-                break
-        total += 1
-    return (hits / total) >= threshold if total else False
+        try:
+            dets = detector.detect(os.path.join(FRAMES_DIR, img))
+
+            for d in dets:
+                if d["class"] in NSFW_CLASSES:
+                    hits += 1
+                    break
+
+            total += 1
+
+        except Exception as e:
+            print("DETECTION ERROR:", e)
+
+    print(f"[DEBUG] hits={hits}, total={total}")
+
+    if total < 3:  # prevent false triggers
+        return False
+
+    return (hits / total) >= threshold
 
 def detect_explicit_audio(path):
     text = whisper_model.transcribe(path)["text"].lower()
@@ -420,11 +440,13 @@ async def userinfo_cmd(client, m: Message):
 )
 async def scanner(client, m: Message):
 
+    # ✅ Only groups
     if m.chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
         return
 
     settings = await db.get_settings(m.chat.id)
 
+    # ✅ If disabled → skip
     if not settings["enabled"]:
         return
 
@@ -454,16 +476,18 @@ async def scanner(client, m: Message):
 
         try:
             path = await m.download(file_name=path)
-        except:
+        except Exception as e:
+            print("DOWNLOAD ERROR:", e)
             return
 
         filename = get_safe_filename(file)
 
+        # ---------- Filename check ----------
         if any(k in filename.lower() for k in FILENAME_KEYWORDS):
             restricted = True
             reasons.append("Filename")
 
-        # PHOTO
+        # ---------- PHOTO CHECK ----------
         if not restricted and m.photo:
             try:
                 detections = detector.detect(path)
@@ -472,33 +496,60 @@ async def scanner(client, m: Message):
                         restricted = True
                         reasons.append("Photo")
                         break
-            except:
-                pass
+            except Exception as e:
+                print("PHOTO ERROR:", e)
 
-        # VIDEO / AUDIO
-        if not restricted and not m.photo:
+        # ---------- VIDEO CHECK ----------
+        if not restricted and m.video:
             try:
                 info = ffprobe_info(path)
-                has_video = any(s["codec_type"] == "video" for s in info["streams"])
-                has_audio = any(s["codec_type"] == "audio" for s in info["streams"])
-            except:
-                has_video = has_audio = False
 
+                has_video = any(s.get("codec_type") == "video" for s in info.get("streams", []))
+                has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+
+            except Exception as e:
+                print("FFPROBE ERROR:", e)
+                has_video = False
+                has_audio = False
+
+            # 🎞 Video frame scanning
             if has_video:
-                extract_frames(path, settings["frame_fps"])
-                if detect_adult_video(settings["adult_threshold"]):
-                    restricted = True
-                    reasons.append("Video")
+                try:
+                    extract_frames(path, max(settings["frame_fps"], 2))
 
+                    if detect_adult_video(settings["adult_threshold"]):
+                        restricted = True
+                        reasons.append("Video")
+
+                except Exception as e:
+                    print("VIDEO SCAN ERROR:", e)
+
+            # 🎵 Audio scanning
             if not restricted and has_audio and settings["scan_audio"]:
+                try:
+                    if detect_explicit_audio(path):
+                        restricted = True
+                        reasons.append("Audio")
+                except Exception as e:
+                    print("AUDIO ERROR:", e)
+
+        # ---------- AUDIO ONLY ----------
+        if not restricted and m.audio and settings["scan_audio"]:
+            try:
                 if detect_explicit_audio(path):
                     restricted = True
                     reasons.append("Audio")
+            except Exception as e:
+                print("AUDIO ONLY ERROR:", e)
 
+        # ---------- CLEANUP ----------
         try:
             os.remove(path)
         except:
             pass
+
+    # ---------------- DEBUG ----------------
+    print("DEBUG RESULT:", restricted, reasons)
 
     # ---------------- ACTION ----------------
     if restricted:
@@ -509,10 +560,10 @@ async def scanner(client, m: Message):
 
         warns = await db.add_warn(m.chat.id, m.from_user.id)
 
-        # ✅ GLOBAL STATS
+        # global stats
         await db.inc_user_warn(m.from_user.id)
 
-        # ✅ SAVE LOG WITH STRING REASON
+        # log
         await db.log_restricted(
             m.chat.id,
             m.from_user.id,
@@ -520,6 +571,7 @@ async def scanner(client, m: Message):
             ", ".join(reasons)
         )
 
+        # 🚫 BAN IF LIMIT REACHED
         if warns >= WARN_LIMIT:
             try:
                 await client.ban_chat_member(m.chat.id, m.from_user.id)
@@ -535,13 +587,14 @@ async def scanner(client, m: Message):
                 f"⛔ {m.from_user.mention} banned\nReason: {', '.join(reasons)}"
             )
 
+        # ⚠️ WARN MESSAGE
         await client.send_message(
             m.chat.id,
             f"⚠️ {m.from_user.mention}\n"
             f"NSFW detected: {', '.join(reasons)}\n"
             f"Warnings: {warns}/{WARN_LIMIT}"
         )
-
+        
 
 print("✅ Group Scanner Bot Running")
 app.run()
