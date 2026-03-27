@@ -20,8 +20,8 @@ class Database:
             "enabled": True,
             "silent_delete": False,
             "auto_ban": True,
-            "adult_threshold": 0.15,
-            "frame_fps": 2,
+            "adult_threshold": 0.1,
+            "frame_fps": 5,
             "scan_audio": True
         }
         data = await self.settings.find_one({"chat_id": chat_id})
