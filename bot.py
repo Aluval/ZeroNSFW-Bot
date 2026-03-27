@@ -4,7 +4,7 @@ from pyrogram.enums import ChatType
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import *
-from database import db
+from Database.database import db
 
 from nudenet import NudeDetector
 import whisper
