@@ -2,6 +2,7 @@ import motor.motor_asyncio
 import time
 from config import DATABASE_NAME, DATABASE_URI
 
+
 class Database:
     def __init__(self):
         self.client = motor.motor_asyncio.AsyncIOMotorClient(DATABASE_URI)
@@ -58,7 +59,7 @@ class Database:
             "chat_id": chat_id,
             "user_id": user_id,
             "file": file,
-            "reasons": reasons,
+            "reasons": ", ".join(reasons) if isinstance(reasons, list) else str(reasons),
             "time": int(time.time())
         })
 
@@ -116,6 +117,7 @@ class Database:
             "bans": doc.get("bans", 0) if doc else 0
         }
 
+    # ================= ADMIN STATS =================
     async def count_warned_users(self):
         return await self.warns.count_documents({})
 
@@ -131,4 +133,5 @@ class Database:
         return [doc["user_id"] async for doc in cursor]
 
 
+# ================= INIT =================
 db = Database()
