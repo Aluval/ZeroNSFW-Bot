@@ -67,6 +67,7 @@ def extract_frames(video, fps):
             "ffmpeg",
             "-i", video,
             "-vf", f"fps={fps},scale=320:-1",
+            "-q:v", "2",   # 🔥 better quality frames
             f"{FRAMES_DIR}/frame_%03d.jpg",
             "-y"
         ],
@@ -82,7 +83,8 @@ def detect_adult_video(threshold):
             dets = detector.detect(os.path.join(FRAMES_DIR, img))
 
             for d in dets:
-                if d["class"] in NSFW_CLASSES:
+                # 🔥 Added confidence check
+                if d["class"] in NSFW_CLASSES and d["score"] > 0.25:
                     hits += 1
                     break
 
@@ -93,10 +95,12 @@ def detect_adult_video(threshold):
 
     print(f"[DEBUG] hits={hits}, total={total}")
 
-    if total < 3:  # prevent false triggers
+    # ❗ prevent false positives
+    if total < 3:
         return False
 
-    return (hits / total) >= threshold
+    # 🔥 STRONG LOGIC (instead of ratio)
+    return hits >= 2
 
 def detect_explicit_audio(path):
     text = whisper_model.transcribe(path)["text"].lower()
@@ -487,6 +491,11 @@ async def scanner(client, m: Message):
             restricted = True
             reasons.append("Filename")
 
+        # 🔥 FORCE VIDEO FLAG (helps missed cases)
+            if m.video:
+                reasons.append("Video (Filename Suspicious)")
+        
+
         # ---------- PHOTO CHECK ----------
         if not restricted and m.photo:
             try:
@@ -515,7 +524,7 @@ async def scanner(client, m: Message):
             # 🎞 Video frame scanning
             if has_video:
                 try:
-                    extract_frames(path, max(settings["frame_fps"], 2))
+                    extract_frames(path, max(settings["frame_fps"], 5))
 
                     if detect_adult_video(settings["adult_threshold"]):
                         restricted = True
@@ -547,7 +556,12 @@ async def scanner(client, m: Message):
             os.remove(path)
         except:
             pass
-
+            
+        # 🔥 fallback: if video but no detection
+        if m.video and not restricted:
+            print("⚠️ Video not detected — possible model miss")
+        
+    
     # ---------------- DEBUG ----------------
     print("DEBUG RESULT:", restricted, reasons)
 
