@@ -59,23 +59,13 @@ def get_safe_filename(file):
     return "photo"
 
 def extract_frames(video, fps):
-    try:
-        # clear old frames
-        for f in os.listdir(FRAMES_DIR):
-            os.remove(os.path.join(FRAMES_DIR, f))
-
-        cmd = [
-            "ffmpeg",
-            "-i", video,
-            "-vf", f"fps={fps}",
-            f"{FRAMES_DIR}/frame_%03d.jpg",
-            "-y"
-        ]
-
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    except Exception as e:
-        print("FFMPEG ERROR:", e)
+    for f in os.listdir(FRAMES_DIR):
+        os.remove(os.path.join(FRAMES_DIR, f))
+    subprocess.run(
+        ["ffmpeg", "-i", video, "-vf", f"fps={fps}", f"{FRAMES_DIR}/f_%03d.jpg", "-y"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
 def detect_adult_video(threshold):
     hits, total = 0, 0
