@@ -361,14 +361,16 @@ async def userinfo_cmd(client, m: Message):
             sort=[("time", -1)]
         )
 
+        username = f"@{user.username}" if user.username else "No Username"
+
         text = (
             f"👤 **Your Account Info**\n\n"
             f"🆔 ID: `{user.id}`\n"
-            f"👤 Username: @{user.username}\n\n"
+            f"👤 Username: {username}\n\n"
             f"⚠️ Total Warns: {stats['warns']}\n"
             f"🚫 Total Bans: {stats['bans']}\n"
             f"🔍 Last NSFW Reason: "
-            f"{last_log['reasons'] if last_log else 'None'}"
+            f"{last_log.get('reasons', 'None') if last_log else 'None'}"
         )
 
         return await m.reply(text)
@@ -376,7 +378,7 @@ async def userinfo_cmd(client, m: Message):
     # ---------- GROUP / SUPERGROUP ----------
     if m.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
 
-        # Admin checking replied user
+        # Admin checking another user
         if m.reply_to_message and m.from_user.is_chat_admin:
             user = m.reply_to_message.from_user
 
@@ -384,7 +386,7 @@ async def userinfo_cmd(client, m: Message):
         elif not m.reply_to_message:
             user = m.from_user
 
-        # Non-admin trying to inspect others
+        # Block non-admin access
         else:
             return await m.reply("❌ Only admins can view other users info.")
 
@@ -393,10 +395,12 @@ async def userinfo_cmd(client, m: Message):
         stats = await db.get_user_stats(user.id)
         last_log = await db.get_last_log(m.chat.id, user.id)
 
+        username = f"@{user.username}" if user.username else "No Username"
+
         text = (
             f"👤 **User Info**\n\n"
             f"🆔 ID: `{user.id}`\n"
-            f"👤 Username: f"@{user.username}" if user.username else "No Username"
+            f"👤 Username: {username}\n\n"
             f"⚠️ Group Warns: {warns}/{WARN_LIMIT}\n"
             f"🚫 Group Ban: {'YES' if ban_info else 'NO'}\n\n"
             f"📊 **Global Stats**\n"
