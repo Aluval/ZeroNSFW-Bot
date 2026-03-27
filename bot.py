@@ -398,30 +398,34 @@ async def userinfo_cmd(client, m: Message):
 
 
 # ================= SCANNER =================
-import uuid
-
-@app.on_message(filters.video | filters.audio | filters.document | filters.photo)
+@app.on_message(
+    (filters.video | filters.audio | filters.document | filters.photo)
+    & filters.incoming
+)
 async def scanner(client, m: Message):
+
+    print("📩 File received:", m.id)
 
     if m.chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
         return
 
-    # ✅ FIX 1: GET SETTINGS
     settings = await db.get_settings(m.chat.id)
 
-    # ✅ FIX 2: ENABLE CHECK
     if not settings["enabled"]:
+        print("❌ Scanner disabled")
         return
 
     file = m.video or m.audio or m.document or m.photo
 
+    import uuid
     unique_name = f"{uuid.uuid4().hex}"
-    download_path = os.path.join(DOWNLOAD_DIR, unique_name)
+    path = os.path.join(DOWNLOAD_DIR, unique_name)
 
     try:
-        path = await m.download(file_name=download_path)
+        path = await m.download(file_name=path)
+        print("✅ Downloaded:", path)
     except Exception as e:
-        print(f"[DOWNLOAD ERROR] {e}")
+        print("❌ Download error:", e)
         return
 
     restricted = False
@@ -429,25 +433,30 @@ async def scanner(client, m: Message):
 
     filename = get_safe_filename(file)
 
-    # -------- FILENAME CHECK --------
+    # 🔥 QUICK TEST (force detection)
+    print("Filename:", filename)
+
     if any(k in filename.lower() for k in FILENAME_KEYWORDS):
         restricted = True
         reasons.append("Filename")
 
-    # -------- PHOTO CHECK --------
     if not restricted and m.photo:
+        print("📸 Checking photo...")
         try:
             detections = detector.detect(path)
+            print("Detections:", detections)
+
             for d in detections:
                 if d["class"] in NSFW_CLASSES:
                     restricted = True
                     reasons.append("Photo")
                     break
         except Exception as e:
-            print("Photo detect error:", e)
+            print("Photo error:", e)
 
-    # -------- VIDEO / AUDIO CHECK --------
     if not restricted and not m.photo:
+        print("🎥 Checking video/audio...")
+
         try:
             info = ffprobe_info(path)
             has_video = any(s["codec_type"] == "video" for s in info["streams"])
@@ -457,63 +466,36 @@ async def scanner(client, m: Message):
 
         if has_video:
             extract_frames(path, settings["frame_fps"])
-            if detect_adult_video(settings["adult_threshold"]):
+            result = detect_adult_video(settings["adult_threshold"])
+            print("Video NSFW:", result)
+
+            if result:
                 restricted = True
                 reasons.append("Video")
 
-        if not restricted and has_audio and settings["scan_audio"]:
-            if detect_explicit_audio(path):
+        if not restricted and has_audio:
+            result = detect_explicit_audio(path)
+            print("Audio NSFW:", result)
+
+            if result:
                 restricted = True
                 reasons.append("Audio")
 
-    # -------- ACTION --------
+    # 🔥 ACTION
     if restricted:
+        print("🚨 NSFW DETECTED")
+
         try:
             await m.delete()
-        except:
-            pass
+        except Exception as e:
+            print("Delete error:", e)
 
         warns = await db.add_warn(m.chat.id, m.from_user.id)
-        await db.inc_user_warn(m.from_user.id)
 
-        if warns >= WARN_LIMIT:
-            try:
-                await client.ban_chat_member(m.chat.id, m.from_user.id)
-            except:
-                pass
-
-            # ✅ FIX 3: SAVE BAN
-            await db.ban_user(m.chat.id, m.from_user.id, "Auto NSFW Ban")
-
-            await db.reset_warns(m.chat.id, m.from_user.id)
-            await db.inc_user_ban(m.from_user.id)
-
-            await client.send_message(
-                m.chat.id,
-                f"⛔ {m.from_user.mention} banned (Reached {WARN_LIMIT} warnings)"
-            )
-        else:
-            await client.send_message(
-                m.chat.id,
-                f"⚠️ {m.from_user.mention}\n"
-                f"NSFW content detected.\n"
-                f"Warnings: {warns}/{WARN_LIMIT}\n"
-                f"Next violation = BAN"
-            )
-
-        await db.log_restricted(
+        await client.send_message(
             m.chat.id,
-            m.from_user.id,
-            filename,
-            reasons
+            f"⚠️ {m.from_user.mention} NSFW detected\nWarnings: {warns}/{WARN_LIMIT}"
         )
-
-    # -------- CLEANUP --------
-    try:
-        if 'path' in locals() and path and os.path.exists(path):
-            os.remove(path)
-    except Exception as e:
-        print("Cleanup error:", e)
 
 
 
