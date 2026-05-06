@@ -11,3 +11,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "6626666215:AAEBK2X3zVVCvav8unKojDVGC0xQ
 ADMIN = [6469754522]
 DATABASE_URI = os.environ.get("DATABASE_URI", "mongodb+srv://INFINITYRENAME24BOT:INFINITYRENAME24BOT@cluster0.5vkpq73.mongodb.net/?appName=Cluster0")
 DATABASE_NAME = os.environ.get("DATABASE_NAME", "GroupScannerBot")
+# Channel / Group Configuration (Replace with your actual channel/group usernames without the @)
+FSUB_UPDATES = os.environ.get("FSUB_CHANNEL", "Sunrises24BotUpdates")
+FSUB_GROUP = os.environ.get("FSUB_GROUP", "Sunrises24BotSupport")
+LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", -1002145984196)
+
+# Visuals
+ZERONSFW_PIC = os.environ.get("ZERONSFW_PIC", "https://your-image-link.com/logo.jpg")
