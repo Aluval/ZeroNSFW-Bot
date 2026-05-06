@@ -599,5 +599,5 @@ async def scanner(client, m: Message):
         
 
 if __name__ == '__main__':
-    app = Client("ZeroNSFW-Bot", bot_token=BOT_TOKEN)
-    app.run()
+    bot= Client("ZeroNSFW-Bot", bot_token=BOT_TOKEN)
+    bot.run()
