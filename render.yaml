@@ -27,6 +27,8 @@ services:
         sync: false
       - key: ZERONSFW_PIC
         sync: false
+      - key: INFO_PIC
+        sync: false
       - key: ADMIN
         sync: false
       - key: WEBHOOK
