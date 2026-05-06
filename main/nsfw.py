@@ -297,21 +297,6 @@ async def settings_callback(_, q: CallbackQuery):
     )
     await q.answer("✅ Settings updated")
 
-
-@Client.on_message(filters.command("help") & filters.group)
-async def help_cmd(_, m: Message):
-    await m.reply(
-        "🤖 **Admin Commands**\n\n"
-        "/settings – Online settings panel\n"
-        "/ban – Reply to ban user\n"
-        "/unban – Reply to unban (silent)\n"
-        "/warn – Reply to warn\n"
-        "/unwarn – Reset warns\n"
-        "/userinfo – User details\n\n"
-        "⚠️ Warn limit is fixed to 3\n"
-        "ℹ️ Scanner works automatically"
-    )
-
 @Client.on_message(filters.command("users") & filters.group & filters.user(ADMIN))
 async def users_cmd(_, m: Message):
     # Counts
