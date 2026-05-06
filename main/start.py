@@ -1,203 +1,272 @@
-from pyrogram.errors import UserNotParticipant, UserBannedInChannel
+from pyrogram.errors import UserNotParticipant
 from config import *
 from Database.database import db
-from pymongo.errors import PyMongoError
 from pyrogram import Client, filters, enums
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 
 START_TEXT = """
-Hello {}! 🛡️ I am the **ZeroNSFW Bot**.
+Hello {}! 🛡️
 
-I am an AI-powered Telegram moderation bot designed to automatically detect and remove NSFW (Not Safe For Work) content from your groups. I scan images, videos, audio, and file names to maintain a safe and clean community environment.
+I am the **ZeroNSFW Bot**.
 
-**Key Features:**
+I automatically detect and remove NSFW content from groups using AI.
+
+━━━━━━━━━━━━━━━
+
 🔍 AI-based NSFW detection
-🖼 Image scanning using NudeNet
+🖼 Image scanning
 🎥 Video frame analysis
-🎙 Audio transcription and keyword filtering
-📁 File name NSFW detection
-⚠️ Automated warning system
-🔨 Auto-ban after warning limit
+🎙 Audio keyword filtering
+📁 File name detection
+⚠️ Warning system
+🔨 Auto-ban protection
 ⚙️ Admin control panel
-📊 User violation tracking
+📊 User tracking system
 
-Add me to your group and grant me admin rights to keep your community safe! 🚀
+━━━━━━━━━━━━━━━
+
+Add me to your group and promote me as admin 🚀
 """
 
-joined_channel_1 = {}
-joined_channel_2 = {}
+# ================= START =================
 
 @Client.on_message(filters.command("start"))
-async def start(app, msg: Message):
-    user_id = msg.chat.id
+async def start_cmd(app, msg: Message):
+
+    print("START COMMAND RECEIVED")
+
+    user_id = msg.from_user.id
     username = msg.from_user.username or "N/A"
 
-    # Check if user is banned
+    # ---------- BAN CHECK ----------
     if await db.is_user_banned(user_id):
-        await msg.reply_text("Sorry, you are banned 🚫. Contact admin for more information ℹ️.")
-        return
+        return await msg.reply_text(
+            "🚫 You are banned from using this bot."
+        )
 
-    # Fetch user from the database or add a new user
+    # ---------- SAVE USER ----------
     user_data = await db.get_user(user_id)
-    if user_data is None:
-        await db.add_user(user_id, username)
-        user_data = await db.get_user(user_id)
 
-    # Check for channel 1 (updates channel) membership
+    if not user_data:
+        await db.add_user(user_id, username)
+
+    # ---------- FORCE SUB UPDATES ----------
     if FSUB_UPDATES:
         try:
-            user = await app.get_chat_member(FSUB_UPDATES, user_id)
-            if user.status == "kicked":
-                await msg.reply_text("Sorry, you are banned 🚫. Contact admin for more information ℹ️.")
-                return
+            member = await app.get_chat_member(
+                FSUB_UPDATES,
+                user_id
+            )
+
+            if member.status == "kicked":
+                return await msg.reply_text(
+                    "🚫 You are banned from updates channel."
+                )
+
         except UserNotParticipant:
-            await msg.reply_text(
-                text="**Please join my updates channel before using me.**",
+
+            return await msg.reply_text(
+                text="📢 Please join updates channel first.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(text="Join Updates Channel", url=f"https://t.me/{FSUB_UPDATES}")]
+                    [
+                        InlineKeyboardButton(
+                            "Join Updates",
+                            url=FSUB_UPDATES
+                        )
+                    ]
                 ])
             )
-            joined_channel_1[user_id] = False
-            return
-        else:
-            joined_channel_1[user_id] = True
 
-    # Check for channel 2 (group) membership
+    # ---------- FORCE SUB GROUP ----------
     if FSUB_GROUP:
         try:
-            user = await app.get_chat_member(FSUB_GROUP, user_id)
-            if user.status == "kicked":
-                await msg.reply_text("Sorry, you are banned 🚫. Contact admin for more information ℹ️.")
-                return
+            member = await app.get_chat_member(
+                FSUB_GROUP,
+                user_id
+            )
+
+            if member.status == "kicked":
+                return await msg.reply_text(
+                    "🚫 You are banned from support group."
+                )
+
         except UserNotParticipant:
-            await msg.reply_text(
-                text="**Please join my support group before using me.**",
+
+            return await msg.reply_text(
+                text="👥 Please join support group first.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(text="JOIN GROUP", url=f"https://t.me/{FSUB_GROUP}")]
+                    [
+                        InlineKeyboardButton(
+                            "Join Group",
+                            url=FSUB_GROUP
+                        )
+                    ]
                 ])
             )
-            joined_channel_2[user_id] = False
-            return
-        else:
-            joined_channel_2[user_id] = True
 
-    # Update user's membership status in the database
-    await db.update_user_membership(
-        user_id,
-        joined_channel_1.get(user_id, False),
-        joined_channel_2.get(user_id, False)
+    # ---------- START MESSAGE ----------
+    caption = START_TEXT.format(
+        msg.from_user.first_name
     )
 
-    # If the user has joined both required channels, send the start message with photo
-    if joined_channel_1.get(user_id, False) and joined_channel_2.get(user_id, False):
-        start_text = START_TEXT.format(msg.from_user.first_name) if hasattr(msg, "message_id") else START_TEXT
-        
-        # Note: Ensure ZERONSFW_PIC is defined in your config.py
-        await app.send_photo(
-            chat_id=user_id,
-            photo=ZERONSFW_PIC, 
-            caption=start_text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Developer 🛡️", url="https://t.me/Sunrises_24"),
-                 InlineKeyboardButton("Updates 📢", url="https://t.me/Sunrises24botupdates")],
-                [InlineKeyboardButton("Help 🌟", callback_data="help"),
-                 InlineKeyboardButton("About 🧑🏻‍💻", callback_data="about")],
-                [InlineKeyboardButton("Support ❤️‍🔥", url="https://t.me/Sunrises24botSupport")]
-            ]),
-            reply_to_message_id=getattr(msg, "message_id", None)
-        )
-    else:
-        await msg.reply_text(
-            "You need to join both the updates channel and the group to use the bot."
-        )
+    await app.send_photo(
+        chat_id=msg.chat.id,
+        photo=ZERONSFW_PIC,
+        caption=caption,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "Developer 🧑🏻‍💻",
+                    url="https://t.me/Sunrises_24"
+                ),
 
-    # Notify log channel
-    log_message = (
-        f"💬 **Bot Started**\n"
-        f"🆔 **ID**: {user_id}\n"
-        f"👤 **Username**: {username}"
+                InlineKeyboardButton(
+                    "Updates 📢",
+                    url="https://t.me/Sunrises24botupdates"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "Help 🌟",
+                    callback_data="help"
+                ),
+
+                InlineKeyboardButton(
+                    "About ℹ️",
+                    callback_data="about"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "Support ❤️",
+                    url="https://t.me/Sunrises24botSupport"
+                )
+            ]
+        ])
     )
+
+    # ---------- LOG ----------
     try:
-        await app.send_message(LOG_CHANNEL_ID, log_message)
+
+        log_text = (
+            f"💬 Bot Started\n\n"
+            f"👤 User: {msg.from_user.mention}\n"
+            f"🆔 ID: `{user_id}`\n"
+            f"📛 Username: @{username}"
+        )
+
+        await app.send_message(
+            LOG_CHANNEL_ID,
+            log_text
+        )
+
     except Exception as e:
-        print(f"An error occurred while sending log message: {e}")
+        print("LOG ERROR:", e)
 
-async def check_membership(app, msg: Message, fsub, joined_channel_dict, prompt_text, join_url):
-    user_id = msg.chat.id
-    if user_id in joined_channel_dict and not joined_channel_dict[user_id]:
-        await msg.reply_text(
-            text=prompt_text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(text="Join Now", url=join_url)]
-            ])
-        )
-        return False
-    return True
+# ================= HELP CALLBACK =================
 
-@Client.on_message(filters.private & ~filters.command("start"))
-async def handle_private_message(app, msg: Message):
-    user_id = msg.chat.id
+@Client.on_callback_query(filters.regex("^help$"))
+async def help_callback(_, query):
 
-    # Check if user is banned
-    if await db.is_user_banned(user_id):
-        await msg.reply_text("Sorry, you are banned 🚫. Contact admin for more information ℹ️.")
-        return
-    
-    # Check membership for updates channel
-    if FSUB_UPDATES and not await check_membership(app, msg, FSUB_UPDATES, joined_channel_1, "Please join my updates channel before using me.", f"https://t.me/{FSUB_UPDATES}"):
-        return
-    
-    # Check membership for group channel
-    if FSUB_GROUP and not await check_membership(app, msg, FSUB_GROUP, joined_channel_2, "Please join my support group before using me.", f"https://t.me/{FSUB_GROUP}"):
-        return
-        
+    text = (
+        "🌟 **Help Menu**\n\n"
 
-# FUNCTION CALLBACK HELP
-@Client.on_callback_query(filters.regex("help"))
-async def help_callback(app, msg):
-    txt =  "For assistance with setting up moderation, click the 'Help' button or type the `/help` command for detailed instructions and support.\n\n"
-    txt += "Join : @Sunrises24botupdates"
-    button = [[        
-        InlineKeyboardButton("Close ❌", callback_data="del")   
-    ]] 
-    await msg.message.edit(text=txt, reply_markup=InlineKeyboardMarkup(button), disable_web_page_preview=True)
- 
+        "/settings → Bot settings\n"
+        "/ban → Ban user\n"
+        "/unban → Unban user\n"
+        "/warn → Warn user\n"
+        "/unwarn → Reset warns\n"
+        "/userinfo → User information\n\n"
 
-# FUNCTION CALL BACK ABOUT
-@Client.on_callback_query(filters.regex("about"))
-async def about_callback(app, msg):
+        "⚠️ Warn limit = 3\n"
+        "🤖 Scanner works automatically"
+    )
+
+    await query.message.edit_text(
+        text=text,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "Close ❌",
+                    callback_data="close"
+                )
+            ]
+        ])
+    )
+
+# ================= ABOUT CALLBACK =================
+
+@Client.on_callback_query(filters.regex("^about$"))
+async def about_callback(app, query):
+
     me = await app.get_me()
-    txt = f"<b>🤖 Bot Name: {me.mention}</b>\n"
-    txt += "<b>🧑🏻‍💻 Developer: <a href='https://t.me/Sunrises_24>SUNRISES™🧑🏻‍💻</a></b>\n"     
-    txt += "<b>📢 Updates: <a href='href=https://t.me/Sunrises24botupdates'>SUNRISES™</a></b>\n"
-    txt += "<b>✨ Support: <a href='https://t.me/Sunrises24botSupport'>SUNRISES⚡</a></b>\n"
-    txt += "<b>📊 Build Status : v1.0 [Stable]</b>" 
-    
-    button = [[        
-        InlineKeyboardButton("Close ❌", callback_data="del")        
-    ]]  
-    await msg.message.edit(text=txt, reply_markup=InlineKeyboardMarkup(button), disable_web_page_preview=True, parse_mode=enums.ParseMode.HTML)
 
+    text = (
+        f"<b>🤖 Bot Name:</b> {me.mention}\n\n"
 
-@Client.on_callback_query(filters.regex("del"))
-async def closed_callback(app, msg):
+        "<b>🧑🏻‍💻 Developer:</b> "
+        "<a href='https://t.me/Sunrises_24'>"
+        "SUNRISES™"
+        "</a>\n\n"
+
+        "<b>📢 Updates:</b> "
+        "<a href='https://t.me/Sunrises24botupdates'>"
+        "Join Channel"
+        "</a>\n\n"
+
+        "<b>❤️ Support:</b> "
+        "<a href='https://t.me/Sunrises24botSupport'>"
+        "Support Group"
+        "</a>\n\n"
+
+        "<b>📊 Version:</b> v1.0 Stable"
+    )
+
+    await query.message.edit_text(
+        text=text,
+        parse_mode=enums.ParseMode.HTML,
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "Close ❌",
+                    callback_data="close"
+                )
+            ]
+        ])
+    )
+
+# ================= CLOSE =================
+
+@Client.on_callback_query(filters.regex("^close$"))
+async def close_callback(_, query):
+
     try:
-        await msg.message.delete()
+        await query.message.delete()
     except:
-        return
+        pass
 
+# ================= HELP COMMAND =================
 
 @Client.on_message(filters.command("help") & filters.group)
 async def help_cmd(_, m: Message):
-    await m.reply(
+
+    await m.reply_text(
         "🤖 **Admin Commands**\n\n"
-        "/settings – Online settings panel\n"
-        "/ban – Reply to ban user\n"
-        "/unban – Reply to unban (silent)\n"
-        "/warn – Reply to warn\n"
-        "/unwarn – Reset warns\n"
-        "/userinfo – User details\n\n"
-        "⚠️ Warn limit is fixed to 3\n"
-        "ℹ️ Scanner works automatically"
+
+        "/settings → Open settings panel\n"
+        "/ban → Ban user\n"
+        "/unban → Unban user\n"
+        "/warn → Warn user\n"
+        "/unwarn → Reset warnings\n"
+        "/userinfo → User info\n\n"
+
+        "⚠️ Warn limit = 3\n"
+        "🤖 Scanner works automatically"
     )
