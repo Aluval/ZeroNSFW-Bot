@@ -28,7 +28,7 @@ Add me to your group and grant me admin rights to keep your community safe! 🚀
 joined_channel_1 = {}
 joined_channel_2 = {}
 
-@app.on_message(filters.command("start"))
+@Client.on_message(filters.command("start"))
 async def start(app, msg: Message):
     user_id = msg.chat.id
     username = msg.from_user.username or "N/A"
@@ -135,7 +135,7 @@ async def check_membership(app, msg: Message, fsub, joined_channel_dict, prompt_
         return False
     return True
 
-@app.on_message(filters.private & ~filters.command("start"))
+@Client.on_message(filters.private & ~filters.command("start"))
 async def handle_private_message(app, msg: Message):
     user_id = msg.chat.id
 
@@ -154,7 +154,7 @@ async def handle_private_message(app, msg: Message):
         
 
 # FUNCTION CALLBACK HELP
-@app.on_callback_query(filters.regex("help"))
+@Client.on_callback_query(filters.regex("help"))
 async def help_callback(app, msg):
     txt =  "For assistance with setting up moderation, click the 'Help' button or type the `/help` command for detailed instructions and support.\n\n"
     txt += "Join : @Sunrises24botupdates"
@@ -165,7 +165,7 @@ async def help_callback(app, msg):
  
 
 # FUNCTION CALL BACK ABOUT
-@app.on_callback_query(filters.regex("about"))
+@Client.on_callback_query(filters.regex("about"))
 async def about_callback(app, msg):
     me = await app.get_me()
     txt = f"<b>🤖 Bot Name: {me.mention}</b>\n"
@@ -180,7 +180,7 @@ async def about_callback(app, msg):
     await msg.message.edit(text=txt, reply_markup=InlineKeyboardMarkup(button), disable_web_page_preview=True, parse_mode=enums.ParseMode.HTML)
 
 
-@app.on_callback_query(filters.regex("del"))
+@Client.on_callback_query(filters.regex("del"))
 async def closed_callback(app, msg):
     try:
         await msg.message.delete()
@@ -188,7 +188,7 @@ async def closed_callback(app, msg):
         return
 
 
-@app.on_message(filters.command("help") & filters.group)
+@Client.on_message(filters.command("help") & filters.group)
 async def help_cmd(_, m: Message):
     await m.reply(
         "🤖 **Admin Commands**\n\n"
