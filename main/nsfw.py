@@ -298,8 +298,20 @@ async def settings_callback(_, q: CallbackQuery):
     await q.answer("✅ Settings updated")
 
 
+@Client.on_message(filters.command("help") & filters.group)
+async def help_cmd(_, m: Message):
+    await m.reply(
+        "🤖 **Admin Commands**\n\n"
+        "/settings – Online settings panel\n"
+        "/ban – Reply to ban user\n"
+        "/unban – Reply to unban (silent)\n"
+        "/warn – Reply to warn\n"
+        "/unwarn – Reset warns\n"
+        "/userinfo – User details\n\n"
+        "⚠️ Warn limit is fixed to 3\n"
+        "ℹ️ Scanner works automatically"
+    )
 
-# ================= COMMANDS =================
 @Client.on_message(filters.command("users") & filters.group & filters.user(ADMIN))
 async def users_cmd(_, m: Message):
     # Counts
@@ -336,7 +348,7 @@ async def users_cmd(_, m: Message):
         text += "None"
 
     await m.reply(text)
-    
+
 @Client.on_message(filters.command("id") & filters.group)
 async def id_cmd(_, m: Message):
     await m.reply(
@@ -445,7 +457,8 @@ async def unban_cmd(client, m: Message):
             f"Reason:\n`{e}`\n\n"
             f"💡 Make sure bot is admin with ban permission"
         )
-        
+
+
 @Client.on_message(filters.command("userinfo"))
 async def userinfo_cmd(client, m: Message):
 
@@ -511,8 +524,6 @@ async def userinfo_cmd(client, m: Message):
         return await m.reply(text)
 
 
-
-
 # ================= SCANNER =================
 @Client.on_message(
     (filters.video | filters.audio | filters.document | filters.photo | filters.text)
@@ -570,7 +581,7 @@ async def scanner(client, m: Message):
         # 🔥 FORCE VIDEO FLAG (helps missed cases)
             if m.video:
                 reasons.append("Video (Filename Suspicious)")
-        
+
 
         # ---------- PHOTO CHECK ----------
         if not restricted and m.photo:
@@ -632,12 +643,12 @@ async def scanner(client, m: Message):
             os.remove(path)
         except:
             pass
-            
+
         # 🔥 fallback: if video but no detection
         if m.video and not restricted:
             print("⚠️ Video not detected — possible model miss")
-        
-    
+
+
     # ---------------- DEBUG ----------------
     print("DEBUG RESULT:", restricted, reasons)
 
@@ -684,5 +695,4 @@ async def scanner(client, m: Message):
             f"NSFW detected: {', '.join(reasons)}\n"
             f"Warnings: {warns}/{WARN_LIMIT}"
         )
-        
 
