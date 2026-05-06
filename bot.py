@@ -12,11 +12,9 @@ import whisper
 from config import *
 from Database.database import db
 from pyrogram.errors import UserNotParticipant, UserBannedInChannel
-from config import *
-from Database.database import db
 from pymongo.errors import PyMongoError
-from pyrogram import Client, filters, enums
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram import enums
+
 
 DOWNLOAD_DIR = "downloads"
 FRAMES_DIR = "frames"
