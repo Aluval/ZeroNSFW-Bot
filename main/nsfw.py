@@ -13,6 +13,8 @@ from config import *
 from Database.database import db
 import logging
 
+print("NSFW MODULE LOADED ✅")
+
 DOWNLOAD_DIR = "downloads"
 FRAMES_DIR = "frames"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
