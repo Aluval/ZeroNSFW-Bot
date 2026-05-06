@@ -157,7 +157,7 @@ async def handle_private_message(app, msg: Message):
 @app.on_callback_query(filters.regex("help"))
 async def help_callback(app, msg):
     txt =  "For assistance with setting up moderation, click the 'Help' button or type the `/help` command for detailed instructions and support.\n\n"
-    txt += "Join : @ZeroNSFW_Updates"
+    txt += "Join : @Sunrises24botupdates"
     button = [[        
         InlineKeyboardButton("Close ❌", callback_data="del")   
     ]] 
@@ -186,3 +186,18 @@ async def closed_callback(app, msg):
         await msg.message.delete()
     except:
         return
+
+
+@app.on_message(filters.command("help") & filters.group)
+async def help_cmd(_, m: Message):
+    await m.reply(
+        "🤖 **Admin Commands**\n\n"
+        "/settings – Online settings panel\n"
+        "/ban – Reply to ban user\n"
+        "/unban – Reply to unban (silent)\n"
+        "/warn – Reply to warn\n"
+        "/unwarn – Reset warns\n"
+        "/userinfo – User details\n\n"
+        "⚠️ Warn limit is fixed to 3\n"
+        "ℹ️ Scanner works automatically"
+    )
