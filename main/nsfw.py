@@ -386,12 +386,12 @@ async def unban_cmd(client, m: Message):
             f"💡 Make sure bot is admin with ban permission"
         )
         
-
 @Client.on_message(filters.command("userinfo"))
 async def userinfo_cmd(client, m: Message):
 
     # ---------- PRIVATE CHAT ----------
     if m.chat.type == ChatType.PRIVATE:
+
         user = m.from_user
 
         stats = await db.get_user_stats(user.id)
@@ -419,7 +419,7 @@ async def userinfo_cmd(client, m: Message):
 
         return await m.reply(text)
 
-    # ---------- GROUPS ----------
+    # ---------- GROUP / SUPERGROUP ----------
     if m.chat.type in [
         ChatType.GROUP,
         ChatType.SUPERGROUP
@@ -485,42 +485,7 @@ async def userinfo_cmd(client, m: Message):
 
         return await m.reply(text)
 
-    # ---------- GROUP / SUPERGROUP ----------
-    if m.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
 
-        # Admin checking another user
-        if m.reply_to_message and m.from_user.is_chat_admin:
-            user = m.reply_to_message.from_user
-
-        # User checking self
-        elif not m.reply_to_message:
-            user = m.from_user
-
-        # Block non-admin access
-        else:
-            return await m.reply("❌ Only admins can view other users info.")
-
-        warns = await db.get_warns(m.chat.id, user.id)
-        ban_info = await db.get_ban_info(m.chat.id, user.id)
-        stats = await db.get_user_stats(user.id)
-        last_log = await db.get_last_log(m.chat.id, user.id)
-
-        username = f"@{user.username}" if user.username else "No Username"
-
-        text = (
-            f"👤 **User Info**\n\n"
-            f"🆔 ID: `{user.id}`\n"
-            f"👤 Username: {username}\n\n"
-            f"⚠️ Group Warns: {warns}/{WARN_LIMIT}\n"
-            f"🚫 Group Ban: {'YES' if ban_info else 'NO'}\n\n"
-            f"📊 **Global Stats**\n"
-            f"⚠️ Total Warns: {stats['warns']}\n"
-            f"🚫 Total Bans: {stats['bans']}\n\n"
-            f"🔍 Last NSFW Reason: "
-            f"{last_log.get('reasons', 'None') if last_log else 'None'}"
-        )
-
-        return await m.reply(text)
 
 
 # ================= SCANNER =================
@@ -696,6 +661,3 @@ async def scanner(client, m: Message):
         )
         
 
-if __name__ == '__main__':
-    bot= Client("ZeroNSFW-Bot", bot_token=BOT_TOKEN)
-    bot.run()
