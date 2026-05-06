@@ -18,4 +18,5 @@ LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", -1002145984196)
 WEBHOOK = bool(os.environ.get("WEBHOOK", True))
 PORT = int(os.environ.get("PORT", "8081"))
 # Visuals
-ZERONSFW_PIC = os.environ.get("ZERONSFW_PIC", "https://your-image-link.com/logo.jpg")
+ZERONSFW_PIC = os.environ.get("ZERONSFW_PIC", "https://deposit.pictures/p/c4481c16884d464daa138095905064f5")
+INFO_PIC = os.environ.get("INFO_PIC", "https://deposit.pictures/p/d29ab39df09e4db9b5b9b3c7f7a75008")
