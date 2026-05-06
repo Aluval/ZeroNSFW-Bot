@@ -15,6 +15,7 @@ DATABASE_NAME = os.environ.get("DATABASE_NAME", "GroupScannerBot")
 FSUB_UPDATES = os.environ.get("FSUB_CHANNEL", "Sunrises24BotUpdates")
 FSUB_GROUP = os.environ.get("FSUB_GROUP", "Sunrises24BotSupport")
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", -1002145984196)
-
+WEBHOOK = bool(os.environ.get("WEBHOOK", True))
+PORT = int(os.environ.get("PORT", "8081"))
 # Visuals
 ZERONSFW_PIC = os.environ.get("ZERONSFW_PIC", "https://your-image-link.com/logo.jpg")
