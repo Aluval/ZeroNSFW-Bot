@@ -13,6 +13,49 @@ class Database:
         self.logs = self.db.logs
         self.bans = self.db.bans
         self.user_stats = self.db.user_stats
+        self.users = self.db.users
+    
+    async def new_user(self, user_id, username):
+        return {
+            "_id": user_id,
+            "username": username,
+            "banned": False,
+            "joined_channel_1": False,
+            "joined_channel_2": False,
+            "warnings": 0  # Useful for your Auto-ban feature
+        }
+
+    async def get_user(self, user_id):
+        user = await self.users.find_one({"_id": int(user_id)})
+        return user
+
+    async def add_user(self, user_id, username):
+        user = self.new_user(user_id, username)
+        await self.users.insert_one(user)
+
+    async def is_user_banned(self, user_id):
+        user = await self.get_user(user_id)
+        if user:
+            return user.get("banned", False)
+        return False
+
+    async def update_user_membership(self, user_id, ch1_status, ch2_status):
+        await self.users.update_one(
+            {"_id": int(user_id)},
+            {"$set": {
+                "joined_channel_1": ch1_status,
+                "joined_channel_2": ch2_status
+            }}
+        )
+        
+    # --- Additional methods you might need for ZeroNSFW Features ---
+    
+    async def ban_user(self, user_id):
+        await self.users.update_one({"_id": int(user_id)}, {"$set": {"banned": True}})
+        
+    async def add_warning(self, user_id):
+        await self.users.update_one({"_id": int(user_id)}, {"$inc": {"warnings": 1}})
+    
 
     # ================= SETTINGS =================
     async def get_settings(self, chat_id: int):
