@@ -144,8 +144,6 @@ def detect_explicit_audio(path):
     return any(w in text for w in AUDIO_KEYWORDS)
 
 #================= INLINE SETTINGS =================
-# ================= START =================
-
 @Client.on_message(filters.command("start"))
 async def start_cmd(client, m: Message):
 
@@ -227,7 +225,7 @@ def settings_keyboard(settings):
     ])
 
 
-@Client.on_message(filters.command("settings") & filters.user(ADMIN))
+@Client.on_message(filters.command("settings") & filters.group & filters.user(ADMIN))
 async def settings_cmd(_, m: Message):
     s = await db.get_settings(m.chat.id)
     group_username = f"@{m.chat.username}" if m.chat.username else "Not set"
