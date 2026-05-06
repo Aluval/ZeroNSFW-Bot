@@ -43,7 +43,7 @@ async def start_cmd(app, msg: Message):
     username = msg.from_user.username or "N/A"
 
     # ---------- BAN CHECK ----------
-    if await db.is_user_banned(user_id):
+    if await db.s_globally_banned(user_id):
         return await msg.reply_text(
             "🚫 You are banned from using this bot."
         )
