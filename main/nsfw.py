@@ -162,12 +162,26 @@ async def settings_cmd(_, m: Message):
 
 
 @Client.on_callback_query(filters.regex("^SET_"))
-async def settings_callback(_, q: CallbackQuery):
+async def settings_callback(client, q: CallbackQuery):
 
-    # 🔒 BOT ADMIN ONLY
-    if q.from_user.id not in ADMIN:
+    try:
+        member = await client.get_chat_member(
+            q.message.chat.id,
+            q.from_user.id
+        )
+
+        if member.status not in [
+            enums.ChatMemberStatus.OWNER,
+            enums.ChatMemberStatus.ADMINISTRATOR
+        ]:
+            return await q.answer(
+                "❌ Only group admins can change settings",
+                show_alert=True
+            )
+
+    except Exception as e:
         return await q.answer(
-            "❌ Only bot admin can change settings",
+            f"Error: {e}",
             show_alert=True
         )
 
@@ -175,19 +189,32 @@ async def settings_callback(_, q: CallbackQuery):
     s = await db.get_settings(chat_id)
 
     if q.data == "SET_toggle_enabled":
-        await db.update_setting(chat_id, "enabled", not s["enabled"])
+        await db.update_setting(
+            chat_id,
+            "enabled",
+            not s["enabled"]
+        )
 
     elif q.data == "SET_toggle_silent":
-        await db.update_setting(chat_id, "silent_delete", not s["silent_delete"])
+        await db.update_setting(
+            chat_id,
+            "silent_delete",
+            not s["silent_delete"]
+        )
 
     elif q.data == "SET_toggle_autoban":
-        await db.update_setting(chat_id, "auto_ban", not s["auto_ban"])
+        await db.update_setting(
+            chat_id,
+            "auto_ban",
+            not s["auto_ban"]
+        )
 
-    # 🔄 REFRESH SETTINGS
     s = await db.get_settings(chat_id)
+
     group_username = (
         f"@{q.message.chat.username}"
-        if q.message.chat.username else "Not set"
+        if q.message.chat.username
+        else "Not set"
     )
 
     text = (
@@ -368,19 +395,90 @@ async def userinfo_cmd(client, m: Message):
         user = m.from_user
 
         stats = await db.get_user_stats(user.id)
+
         last_log = await db.logs.find_one(
             {"user_id": user.id},
             sort=[("time", -1)]
         )
 
-        username = f"@{user.username}" if user.username else "No Username"
+        username = (
+            f"@{user.username}"
+            if user.username
+            else "No Username"
+        )
 
         text = (
             f"👤 **Your Account Info**\n\n"
             f"🆔 ID: `{user.id}`\n"
             f"👤 Username: {username}\n\n"
-            f"⚠️ Total Warns: {stats['warns']}\n"
-            f"🚫 Total Bans: {stats['bans']}\n"
+            f"⚠️ Total Warns: {stats.get('warns', 0)}\n"
+            f"🚫 Total Bans: {stats.get('bans', 0)}\n"
+            f"🔍 Last NSFW Reason: "
+            f"{last_log.get('reasons', 'None') if last_log else 'None'}"
+        )
+
+        return await m.reply(text)
+
+    # ---------- GROUPS ----------
+    if m.chat.type in [
+        ChatType.GROUP,
+        ChatType.SUPERGROUP
+    ]:
+
+        # Reply check
+        if m.reply_to_message:
+
+            member = await client.get_chat_member(
+                m.chat.id,
+                m.from_user.id
+            )
+
+            # Admin only
+            if member.status not in [
+                enums.ChatMemberStatus.OWNER,
+                enums.ChatMemberStatus.ADMINISTRATOR
+            ]:
+                return await m.reply(
+                    "❌ Only admins can view others info."
+                )
+
+            user = m.reply_to_message.from_user
+
+        else:
+            user = m.from_user
+
+        warns = await db.get_warns(
+            m.chat.id,
+            user.id
+        )
+
+        ban_info = await db.get_ban_info(
+            m.chat.id,
+            user.id
+        )
+
+        stats = await db.get_user_stats(user.id)
+
+        last_log = await db.get_last_log(
+            m.chat.id,
+            user.id
+        )
+
+        username = (
+            f"@{user.username}"
+            if user.username
+            else "No Username"
+        )
+
+        text = (
+            f"👤 **User Info**\n\n"
+            f"🆔 ID: `{user.id}`\n"
+            f"👤 Username: {username}\n\n"
+            f"⚠️ Group Warns: {warns}/{WARN_LIMIT}\n"
+            f"🚫 Group Ban: {'YES' if ban_info else 'NO'}\n\n"
+            f"📊 **Global Stats**\n"
+            f"⚠️ Total Warns: {stats.get('warns', 0)}\n"
+            f"🚫 Total Bans: {stats.get('bans', 0)}\n\n"
             f"🔍 Last NSFW Reason: "
             f"{last_log.get('reasons', 'None') if last_log else 'None'}"
         )
