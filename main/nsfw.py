@@ -154,14 +154,16 @@ async def settings_cmd(_, m: Message):
         f"🎵 Audio Scan: {s['scan_audio']}"
     )
 
-    await m.reply(
-        text,
+    await m.reply_photo(
+        photo=INFO_PIC,
+        caption=text,
         reply_markup=settings_keyboard(s)
     )
 
 
 @app.on_callback_query(filters.regex("^SET_"))
 async def settings_callback(_, q: CallbackQuery):
+
     # 🔒 BOT ADMIN ONLY
     if q.from_user.id not in ADMIN:
         return await q.answer(
@@ -181,9 +183,12 @@ async def settings_callback(_, q: CallbackQuery):
     elif q.data == "SET_toggle_autoban":
         await db.update_setting(chat_id, "auto_ban", not s["auto_ban"])
 
-    # 🔄 REFRESH UI
+    # 🔄 REFRESH SETTINGS
     s = await db.get_settings(chat_id)
-    group_username = f"@{q.message.chat.username}" if q.message.chat.username else "Not set"
+    group_username = (
+        f"@{q.message.chat.username}"
+        if q.message.chat.username else "Not set"
+    )
 
     text = (
         "⚙️ **Group Settings**\n\n"
@@ -199,10 +204,11 @@ async def settings_callback(_, q: CallbackQuery):
         f"🎵 Audio Scan: {s['scan_audio']}"
     )
 
-    await q.message.edit_text(
-        text,
+    await q.message.edit_caption(
+        caption=text,
         reply_markup=settings_keyboard(s)
     )
+
     await q.answer("✅ Settings updated")
 
 
