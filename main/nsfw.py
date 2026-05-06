@@ -11,9 +11,6 @@ from nudenet import NudeDetector
 import whisper
 from config import *
 from Database.database import db
-from pyrogram.errors import UserNotParticipant, UserBannedInChannel
-from pymongo.errors import PyMongoError
-from pyrogram import enums
 import logging
 
 DOWNLOAD_DIR = "downloads"
@@ -32,6 +29,41 @@ logging.basicConfig(
 
 # Example of logging a message
 logging.info('Bot started successfully!')
+
+
+
+START_TEXT = """
+🛡️ Welcome to ZeroNSFW Bot
+
+AI Powered Group Protection Bot.
+
+━━━━━━━━━━━━━━━
+
+✅ NSFW Detection
+✅ Image Scanner
+✅ Video Scanner
+✅ Audio Scanner
+✅ Auto Warn
+✅ Auto Ban
+✅ Admin Settings
+
+━━━━━━━━━━━━━━━
+
+Add me to your group and make me admin 🚀
+"""
+
+HELP_TEXT = """
+🌟 ZeroNSFW Help Menu
+
+/settings - Open settings
+/warn - Warn user
+/unwarn - Reset warns
+/ban - Ban user
+/unban - Unban user
+/userinfo - User info
+
+⚠️ Warn limit = 3
+"""
 
 # ================= CONSTANTS =================
 NSFW_CLASSES = {
@@ -111,7 +143,67 @@ def detect_explicit_audio(path):
     text = whisper_model.transcribe(path)["text"].lower()
     return any(w in text for w in AUDIO_KEYWORDS)
 
-# ================= INLINE SETTINGS =================
+#================= INLINE SETTINGS =================
+# ================= START =================
+
+@Client.on_message(filters.command("start"))
+async def start_cmd(client, m: Message):
+
+    await m.reply_photo(
+        photo=ZERONSFW_PIC,
+        caption=START_TEXT,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "Developer",
+                    url="https://t.me/Sunrises_24"
+                ),
+
+                InlineKeyboardButton(
+                    "Updates",
+                    url="https://t.me/Sunrises24botupdates"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "Help",
+                    callback_data="help"
+                )
+            ]
+        ])
+    )
+
+# ================= HELP =================
+
+@Client.on_callback_query(filters.regex("^help$"))
+async def help_callback(client, q):
+
+    await q.message.reply_photo(
+        photo=INFO_PIC,
+        caption=HELP_TEXT,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "Support",
+                    url="https://t.me/Sunrises24botSupport"
+                )
+            ]
+        ])
+    )
+
+    await q.answer()
+
+# ================= HELP COMMAND =================
+
+@Client.on_message(filters.command("help"))
+async def help_cmd(client, m: Message):
+
+    await m.reply_photo(
+        photo=INFO_PIC,
+        caption=HELP_TEXT
+    )
+    
 def settings_keyboard(settings):
     return InlineKeyboardMarkup([
         [
@@ -154,34 +246,18 @@ async def settings_cmd(_, m: Message):
         f"🎵 Audio Scan: {s['scan_audio']}"
     )
 
-    await m.reply_photo(
-        photo=INFO_PIC,
-        caption=text,
+    await m.reply(
+        text,
         reply_markup=settings_keyboard(s)
     )
 
 
 @Client.on_callback_query(filters.regex("^SET_"))
-async def settings_callback(client, q: CallbackQuery):
-
-    try:
-        member = await client.get_chat_member(
-            q.message.chat.id,
-            q.from_user.id
-        )
-
-        if member.status not in [
-            enums.ChatMemberStatus.OWNER,
-            enums.ChatMemberStatus.ADMINISTRATOR
-        ]:
-            return await q.answer(
-                "❌ Only group admins can change settings",
-                show_alert=True
-            )
-
-    except Exception as e:
+async def settings_callback(_, q: CallbackQuery):
+    # 🔒 BOT ADMIN ONLY
+    if q.from_user.id not in ADMIN:
         return await q.answer(
-            f"Error: {e}",
+            "❌ Only bot admin can change settings",
             show_alert=True
         )
 
@@ -189,33 +265,17 @@ async def settings_callback(client, q: CallbackQuery):
     s = await db.get_settings(chat_id)
 
     if q.data == "SET_toggle_enabled":
-        await db.update_setting(
-            chat_id,
-            "enabled",
-            not s["enabled"]
-        )
+        await db.update_setting(chat_id, "enabled", not s["enabled"])
 
     elif q.data == "SET_toggle_silent":
-        await db.update_setting(
-            chat_id,
-            "silent_delete",
-            not s["silent_delete"]
-        )
+        await db.update_setting(chat_id, "silent_delete", not s["silent_delete"])
 
     elif q.data == "SET_toggle_autoban":
-        await db.update_setting(
-            chat_id,
-            "auto_ban",
-            not s["auto_ban"]
-        )
+        await db.update_setting(chat_id, "auto_ban", not s["auto_ban"])
 
+    # 🔄 REFRESH UI
     s = await db.get_settings(chat_id)
-
-    group_username = (
-        f"@{q.message.chat.username}"
-        if q.message.chat.username
-        else "Not set"
-    )
+    group_username = f"@{q.message.chat.username}" if q.message.chat.username else "Not set"
 
     text = (
         "⚙️ **Group Settings**\n\n"
@@ -231,12 +291,12 @@ async def settings_callback(client, q: CallbackQuery):
         f"🎵 Audio Scan: {s['scan_audio']}"
     )
 
-    await q.message.edit_caption(
-        caption=text,
+    await q.message.edit_text(
+        text,
         reply_markup=settings_keyboard(s)
     )
-
     await q.answer("✅ Settings updated")
+
 
 
 # ================= COMMANDS =================
@@ -391,28 +451,22 @@ async def userinfo_cmd(client, m: Message):
 
     # ---------- PRIVATE CHAT ----------
     if m.chat.type == ChatType.PRIVATE:
-
         user = m.from_user
 
         stats = await db.get_user_stats(user.id)
-
         last_log = await db.logs.find_one(
             {"user_id": user.id},
             sort=[("time", -1)]
         )
 
-        username = (
-            f"@{user.username}"
-            if user.username
-            else "No Username"
-        )
+        username = f"@{user.username}" if user.username else "No Username"
 
         text = (
             f"👤 **Your Account Info**\n\n"
             f"🆔 ID: `{user.id}`\n"
             f"👤 Username: {username}\n\n"
-            f"⚠️ Total Warns: {stats.get('warns', 0)}\n"
-            f"🚫 Total Bans: {stats.get('bans', 0)}\n"
+            f"⚠️ Total Warns: {stats['warns']}\n"
+            f"🚫 Total Bans: {stats['bans']}\n"
             f"🔍 Last NSFW Reason: "
             f"{last_log.get('reasons', 'None') if last_log else 'None'}"
         )
@@ -420,55 +474,26 @@ async def userinfo_cmd(client, m: Message):
         return await m.reply(text)
 
     # ---------- GROUP / SUPERGROUP ----------
-    if m.chat.type in [
-        ChatType.GROUP,
-        ChatType.SUPERGROUP
-    ]:
+    if m.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
 
-        # Reply check
-        if m.reply_to_message:
-
-            member = await client.get_chat_member(
-                m.chat.id,
-                m.from_user.id
-            )
-
-            # Admin only
-            if member.status not in [
-                enums.ChatMemberStatus.OWNER,
-                enums.ChatMemberStatus.ADMINISTRATOR
-            ]:
-                return await m.reply(
-                    "❌ Only admins can view others info."
-                )
-
+        # Admin checking another user
+        if m.reply_to_message and m.from_user.is_chat_admin:
             user = m.reply_to_message.from_user
 
-        else:
+        # User checking self
+        elif not m.reply_to_message:
             user = m.from_user
 
-        warns = await db.get_warns(
-            m.chat.id,
-            user.id
-        )
+        # Block non-admin access
+        else:
+            return await m.reply("❌ Only admins can view other users info.")
 
-        ban_info = await db.get_ban_info(
-            m.chat.id,
-            user.id
-        )
-
+        warns = await db.get_warns(m.chat.id, user.id)
+        ban_info = await db.get_ban_info(m.chat.id, user.id)
         stats = await db.get_user_stats(user.id)
+        last_log = await db.get_last_log(m.chat.id, user.id)
 
-        last_log = await db.get_last_log(
-            m.chat.id,
-            user.id
-        )
-
-        username = (
-            f"@{user.username}"
-            if user.username
-            else "No Username"
-        )
+        username = f"@{user.username}" if user.username else "No Username"
 
         text = (
             f"👤 **User Info**\n\n"
@@ -477,8 +502,8 @@ async def userinfo_cmd(client, m: Message):
             f"⚠️ Group Warns: {warns}/{WARN_LIMIT}\n"
             f"🚫 Group Ban: {'YES' if ban_info else 'NO'}\n\n"
             f"📊 **Global Stats**\n"
-            f"⚠️ Total Warns: {stats.get('warns', 0)}\n"
-            f"🚫 Total Bans: {stats.get('bans', 0)}\n\n"
+            f"⚠️ Total Warns: {stats['warns']}\n"
+            f"🚫 Total Bans: {stats['bans']}\n\n"
             f"🔍 Last NSFW Reason: "
             f"{last_log.get('reasons', 'None') if last_log else 'None'}"
         )
